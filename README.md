@@ -16,8 +16,9 @@ Baseline model for "GraspNet-1Billion: A Large-Scale Benchmark for General Objec
 ![teaser](doc/teaser.png)
 
 ## Requirements
-- Python 3
-- PyTorch 1.6
+- Python 3.8
+- CUDA 12.1
+- PyTorch 2.1
 - Open3d >=0.8
 - TensorBoard 2.3
 - NumPy
