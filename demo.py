@@ -50,12 +50,12 @@ def get_net():
 
 def get_and_process_data(data_dir):
     # load data
-    color = np.array(Image.open(os.path.join(data_dir, 'color.png')), dtype=np.float32) / 255.0
-    depth = np.array(Image.open(os.path.join(data_dir, 'depth.png')))
-    workspace_mask = np.array(Image.open(os.path.join(data_dir, 'workspace_mask.png')))
+    color = np.array(Image.open(os.path.join(data_dir, 'color.png')), dtype=np.float32) / 255.0 # 1280 x 720 x 3 , 0.0 ~ 1.0
+    depth = np.array(Image.open(os.path.join(data_dir, 'depth.png'))) # 1280 x 720, 0 ~ 1590
+    workspace_mask = np.array(Image.open(os.path.join(data_dir, 'workspace_mask.png'))) # 1280 x 720, True or False
     meta = scio.loadmat(os.path.join(data_dir, 'meta.mat'))
-    intrinsic = meta['intrinsic_matrix']
-    factor_depth = meta['factor_depth']
+    intrinsic = meta['intrinsic_matrix'] # 3 x 3
+    factor_depth = meta['factor_depth'] # 1000.0
 
     # generate cloud
     camera = CameraInfo(1280.0, 720.0, intrinsic[0][0], intrinsic[1][1], intrinsic[0][2], intrinsic[1][2], factor_depth)
@@ -109,7 +109,8 @@ def vis_grasps(gg, cloud):
     gg.sort_by_score()
     gg = gg[:50]
     grippers = gg.to_open3d_geometry_list()
-    o3d.visualization.draw_geometries([cloud, *grippers])
+    camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
+    o3d.visualization.draw_geometries([cloud, *grippers, camera_frame])
 
 def demo(data_dir):
     net = get_net()
