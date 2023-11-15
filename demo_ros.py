@@ -38,6 +38,7 @@ cfgs = parser.parse_args()
 
 COLOR_IMAGE=None
 DEPTH_IMAGE=None
+MASK_IMAGE=None
 
 def get_net():
     # Init the model
@@ -58,7 +59,8 @@ def get_and_process_data(data_dir):
     # load data
     color = COLOR_IMAGE # 1280 x 720 x 3 , 0.0 ~ 1.0
     depth = DEPTH_IMAGE # 1280 x 720, 0 ~ 1590
-    workspace_mask = np.array(Image.open(os.path.join(data_dir, 'workspace_mask.png'))) # 1280 x 720, True or False
+    # workspace_mask = np.array(Image.open(os.path.join(data_dir, 'workspace_mask.png'))) # 1280 x 720, True or False
+    workspace_mask = MASK_IMAGE # 1280 x 720, True or False
     meta = scio.loadmat(os.path.join(data_dir, 'meta.mat'))
     intrinsic = meta['intrinsic_matrix'] # 3 x 3
     factor_depth = meta['factor_depth'] # 1000.0
@@ -119,7 +121,7 @@ def vis_grasps(gg, cloud):
     o3d.visualization.draw_geometries([cloud, *grippers, camera_frame])
 
 def demo(event):
-    if COLOR_IMAGE is None or DEPTH_IMAGE is None:
+    if COLOR_IMAGE is None or DEPTH_IMAGE is None or MASK_IMAGE is None:
         print('Images are not ready')
         return
     net = get_net()
@@ -147,6 +149,12 @@ def depth_image_callback(msg):
     DEPTH_IMAGE = np.array(cv_image)
     return
     
+def mask_image_callback(msg):
+    bridge = CvBridge()
+    cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+    global MASK_IMAGE
+    MASK_IMAGE = np.array(cv_image, dtype=bool)
+    return
 
 if __name__ == '__main__':
     rospy.init_node('graspnet_ros_demo')
@@ -154,6 +162,7 @@ if __name__ == '__main__':
     # 创建图像订阅者
     _ = rospy.Subscriber('/camera/color/image_raw', sensor_msgs.msg.Image, color_image_callback)
     _ = rospy.Subscriber('/camera/aligned_depth_to_color/image_raw', sensor_msgs.msg.Image, depth_image_callback)
+    _ = rospy.Subscriber('/detic/target_mask', sensor_msgs.msg.Image, mask_image_callback)
     _ = rospy.Timer(rospy.Duration(0.5), demo)
 
     # 进入ROS循环
