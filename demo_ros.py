@@ -55,18 +55,30 @@ def get_net():
     net.eval()
     return net
 
-def get_and_process_data(data_dir):
+def dilated_outer_rectangle(foreground_mask):
+    # 找到True值的索引范围
+    nonzero_indices = np.where(foreground_mask)
+
+    # 计算外接矩形的左上角坐标和宽度、高度
+    min_row = np.min(nonzero_indices[0]) - 200
+    max_row = np.max(nonzero_indices[0]) + 200
+    min_col = np.min(nonzero_indices[1]) - 200
+    max_col = np.max(nonzero_indices[1]) + 200
+
+    dilated_outer_rectangle_mask = np.zeros(foreground_mask.shape, dtype=bool)
+    dilated_outer_rectangle_mask[min_row:max_row+1, min_col:max_col+1] = True
+    return dilated_outer_rectangle_mask
+
+def get_and_process_data():
     # load data
     color = COLOR_IMAGE # 1280 x 720 x 3 , 0.0 ~ 1.0
     depth = DEPTH_IMAGE # 1280 x 720, 0 ~ 1590
-    # workspace_mask = np.array(Image.open(os.path.join(data_dir, 'workspace_mask.png'))) # 1280 x 720, True or False
-    workspace_mask = MASK_IMAGE # 1280 x 720, True or False
-    meta = scio.loadmat(os.path.join(data_dir, 'meta.mat'))
-    intrinsic = meta['intrinsic_matrix'] # 3 x 3
-    factor_depth = meta['factor_depth'] # 1000.0
+    workspace_mask = dilated_outer_rectangle(MASK_IMAGE) # 1280 x 720, True or False
 
+    # 获取相机内参：rostopic echo /camera/color/camera_info
+    #  width, height, fx, fy, cx, cy, scale
+    camera = CameraInfo(1280.0, 720.0, 911.272, 911.4296, 647.6853, 366.2829, 1000.0)
     # generate cloud
-    camera = CameraInfo(1280.0, 720.0, intrinsic[0][0], intrinsic[1][1], intrinsic[0][2], intrinsic[1][2], factor_depth)
     cloud = create_point_cloud_from_depth_image(depth, camera, organized=True)
 
     # get valid points
@@ -112,24 +124,38 @@ def collision_detection(gg, cloud):
     gg = gg[~collision_mask]
     return gg
 
-def vis_grasps(gg, cloud):
-    gg.nms()
-    gg.sort_by_score()
-    gg = gg[:50]
-    grippers = gg.to_open3d_geometry_list()
-    camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
-    o3d.visualization.draw_geometries([cloud, *grippers, camera_frame])
+def project_3d_to_2d(x, y, z, fx, fy, cx, cy):
+    u = int(fx * x / z + cx)
+    v = int(fy * y / z + cy)
+    return u, v
 
 def demo(event):
     if COLOR_IMAGE is None or DEPTH_IMAGE is None or MASK_IMAGE is None:
         print('Images are not ready')
         return
     net = get_net()
-    end_points, cloud = get_and_process_data('doc/example_data')
+    end_points, cloud = get_and_process_data()
     gg = get_grasps(net, end_points)
     if cfgs.collision_thresh > 0:
         gg = collision_detection(gg, np.array(cloud.points))
-    vis_grasps(gg, cloud)
+    gg.nms()
+    gg.sort_by_score()
+    gg = gg[:30]
+    ######### 排除掉mask外的抓取点 ############
+    remove_index = []
+    for i in range(len(gg)):
+        grasp = gg[i]
+        x, y, z = grasp.translation
+        u, v = project_3d_to_2d(x, y, z, 911.272, 911.4296, 647.6853, 366.2829)
+        if not MASK_IMAGE[v, u]:
+            remove_index.append(i)
+    for i in remove_index[::-1]:
+        gg.remove(i)
+    #########################################
+    o3d.visualization.draw_geometries([cloud
+                                       , *gg.to_open3d_geometry_list()
+                                       , o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
+                                       ])
 
 def color_image_callback(msg):
     # 创建CvBridge对象
@@ -163,7 +189,7 @@ if __name__ == '__main__':
     _ = rospy.Subscriber('/camera/color/image_raw', sensor_msgs.msg.Image, color_image_callback)
     _ = rospy.Subscriber('/camera/aligned_depth_to_color/image_raw', sensor_msgs.msg.Image, depth_image_callback)
     _ = rospy.Subscriber('/detic/target_mask', sensor_msgs.msg.Image, mask_image_callback)
-    _ = rospy.Timer(rospy.Duration(0.5), demo)
+    _ = rospy.Timer(rospy.Duration(1.0), demo)
 
     # 进入ROS循环
     rospy.spin()
