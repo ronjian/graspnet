@@ -129,6 +129,27 @@ def project_3d_to_2d(x, y, z, fx, fy, cx, cy):
     v = int(fy * y / z + cy)
     return u, v
 
+def base_link_transform():
+    # 绕x轴转135度
+    angle = np.deg2rad(135)
+    c = np.cos(angle)
+    s = np.sin(angle)
+    T1 = np.eye(4)
+    T1[1:3, 1:3] = np.array([[c, -s], [s, c]])
+    # 绕z轴转180度
+    angle = np.deg2rad(180)
+    c = np.cos(angle)
+    s = np.sin(angle)
+    T2 = np.eye(4)
+    T2[0:2, 0:2] = np.array([[c, -s], [s, c]])
+    # z轴平移-0.67
+    T3 = np.eye(4)
+    T3[2, 3] = -0.67
+    # y轴平移-0.04
+    T4 = np.eye(4)
+    T4[1, 3] = -0.04
+    return T1 @ T2 @ T3 @ T4
+
 def demo(event):
     if COLOR_IMAGE is None or DEPTH_IMAGE is None or MASK_IMAGE is None:
         print('Images are not ready')
@@ -152,10 +173,24 @@ def demo(event):
     for i in remove_index[::-1]:
         gg.remove(i)
     #########################################
+    T = base_link_transform()
+    base_link = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.1) # 坐标轴
+    base_link = base_link.transform(T)
     o3d.visualization.draw_geometries([cloud
                                        , *gg.to_open3d_geometry_list()
-                                       , o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
+                                       , o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0, 0, 0])
+                                       , base_link
                                        ])
+
+    print("origin tranlation of the best grasp is ", gg[0].translation)
+    origin_grasp_transform = np.eye(4)
+    origin_grasp_transform[0:3, 0:3] = gg[0].rotation_matrix
+    origin_grasp_transform[0:3, 3] = gg[0].translation
+    new_grasp_transform = np.linalg.inv(T) @ origin_grasp_transform
+    print("new tranlation of the best grasp is ", new_grasp_transform[0:3, 3])
+
+    return
+
 
 def color_image_callback(msg):
     # 创建CvBridge对象
