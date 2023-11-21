@@ -7,9 +7,6 @@ import sys
 import numpy as np
 import open3d as o3d
 import argparse
-import importlib
-import scipy.io as scio
-from PIL import Image
 
 import torch
 from graspnetAPI import GraspGroup
@@ -17,6 +14,7 @@ from graspnetAPI import GraspGroup
 import rospy
 import sensor_msgs
 from cv_bridge import CvBridge
+import scipy
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(ROOT_DIR, 'models'))
@@ -173,6 +171,11 @@ def demo(event):
     for i in remove_index[::-1]:
         gg.remove(i)
     #########################################
+    ####### 只保留 TOP1 的抓取点 #############
+    for i in range(len(gg)-1, 0, -1):
+        gg.remove(i)
+    #########################################
+    ############# base link坐标系 #############
     T = base_link_transform()
     base_link = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.1) # 坐标轴
     base_link = base_link.transform(T)
@@ -188,6 +191,10 @@ def demo(event):
     origin_grasp_transform[0:3, 3] = gg[0].translation
     new_grasp_transform = np.linalg.inv(T) @ origin_grasp_transform
     print("new tranlation of the best grasp is ", new_grasp_transform[0:3, 3])
+    rotation_obj = scipy.spatial.transform.Rotation.from_matrix(new_grasp_transform[0:3, 0:3])
+    quaternion = rotation_obj.as_quat()
+    print("new quaternion of the best grasp is ", quaternion)
+    ##########################################
 
     return
 
