@@ -15,6 +15,7 @@ import rospy
 import sensor_msgs
 from cv_bridge import CvBridge
 import scipy
+import geometry_msgs.msg
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(ROOT_DIR, 'models'))
@@ -27,7 +28,7 @@ from collision_detector import ModelFreeCollisionDetector
 from data_utils import CameraInfo, create_point_cloud_from_depth_image
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--checkpoint_path', required=True, help='Model checkpoint path')
+parser.add_argument('--checkpoint_path', default="logs/log_kn/checkpoint-rs.tar", required=False, help='Model checkpoint path')
 parser.add_argument('--num_point', type=int, default=20000, help='Point Number [default: 20000]')
 parser.add_argument('--num_view', type=int, default=300, help='View Number [default: 300]')
 parser.add_argument('--collision_thresh', type=float, default=0.01, help='Collision Threshold in collision detection [default: 0.01]')
@@ -37,6 +38,7 @@ cfgs = parser.parse_args()
 COLOR_IMAGE=None
 DEPTH_IMAGE=None
 MASK_IMAGE=None
+GRASP_POSE_PUB = rospy.Publisher('/grasp_pose', geometry_msgs.msg.Pose, queue_size=1)
 
 def get_net():
     # Init the model
@@ -195,7 +197,15 @@ def demo(event):
     quaternion = rotation_obj.as_quat()
     print("new quaternion of the best grasp is ", quaternion)
     ##########################################
-
+    grasp_pose = geometry_msgs.msg.Pose()
+    grasp_pose.position.x = new_grasp_transform[0, 3]
+    grasp_pose.position.y = new_grasp_transform[1, 3]
+    grasp_pose.position.z = new_grasp_transform[2, 3]
+    grasp_pose.orientation.x = quaternion[0]
+    grasp_pose.orientation.y = quaternion[1]
+    grasp_pose.orientation.z = quaternion[2]
+    grasp_pose.orientation.w = quaternion[3]
+    GRASP_POSE_PUB.publish(grasp_pose)
     return
 
 
